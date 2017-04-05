@@ -3,14 +3,19 @@
 The WIP successor to [osu!track](https://ameobea.me/osutrack/) re-designed to be feature-packed, fast, robust, and cute.  It's fully open source with a public API giving access to all stored osu!track data.  Built using a Rust backend and utilizing the Rocket webserver, it's highly performant and leagues ahead of the PHP monstrosity I built as my learn-webdev project years ago.
 
 ## Installing the Dev Environment
-This section will be added once I flesh a bit more of the foundation of the application out.
+Currently, this has only been tested on Linux.  As soon as a developer based on Windows or Mac wishes to join the project, I will make every effort to get it building on other platforms as well (Shouldn't be too difficult).
+
+This project has the following dependencies:
+ * `node` and `npm`
+ * Rust nightly; to install, checkout https://rustup.rs/
+ * The Ubuntu `libmysqlclient-dev` package or equivalent
+
+*This section will be extended once I flesh a bit more of the foundation of the application out.*
 
 ## Contributing
 This is a project for the community, and so the community is welcome to contribute and help make it their own!  I'm going to complete it no matter what levels of contribution the project receives, but any help is very much appreciated.
 
-If you want to contribute, the best place to start is the osu!track v2 development Discord server:
-
-<center><iframe src="https://discordapp.com/widget?id=299018620573450250&theme=light" width="50%" height="475" allowtransparency="true" frameborder="0"></iframe></center>
+If you want to contribute, the best place to start is the osu!track v2 development Discord server: https://discord.gg/qh8B7YW
 
 Ping me (@Ameo) and I'd be more than happy to chat with you about any ideas you have for the site, questions you have about its development, or anything else.  I really want to make this a community-focused project, so I'm happy to implement peoples' ideas for new features or improvements.
 

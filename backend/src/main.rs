@@ -9,6 +9,10 @@ extern crate chrono;
 extern crate diesel_codegen;
 #[macro_use]
 extern crate diesel;
+#[macro_use]
+extern crate lazy_static;
+extern crate r2d2;
+extern crate r2d2_diesel;
 extern crate rocket;
 #[macro_use]
 extern crate rocket_contrib;
@@ -16,103 +20,50 @@ extern crate serde_json;
 #[macro_use]
 extern crate serde_derive;
 
-use chrono::{DateTime, UTC};
 use diesel::prelude::*;
 use diesel::mysql::MysqlConnection;
+use r2d2::{ GetTimeout, Pool, PooledConnection, Config };
+use r2d2_diesel::ConnectionManager;
+use rocket::http::Status;
+use rocket::Request;
+use rocket::Outcome::{Success, Failure};
+use rocket::request::{FromRequest, Outcome};
 
 mod secret;
-use secret::{DbCredentials, DB_CREDENTIALS};
+use secret::{DB_CREDENTIALS, format_url};
 mod routes;
 use routes::update;
+mod schema;
 
-/// Represents a user.  Maps our internal id to the osu! id and contains the last time the user was updated.
-#[derive(Queryable)]
-struct User {
-    pub id: u32,
-    pub osu_id: u32,
-    pub username: String,
-    pub first_update: DateTime<UTC>,
-    pub last_update: DateTime<UTC>,
+pub fn create_db_pool() -> Pool<ConnectionManager<MysqlConnection>> {
+    let config = Config::default();
+    let manager = ConnectionManager::<MysqlConnection>::new(format_url(DB_CREDENTIALS));
+    Pool::new(config, manager).expect("Failed to create pool.")
 }
 
-/// Represents an update.  Stored as a snapshot of a player's stats at a certain point in time.
-#[derive(Queryable)]
-struct Update {
-    pub id: u32,
-    pub user_id: u32,
-    pub mode: u8,
-    pub count300: u32,
-    pub count100: u32,
-    pub count50: u32,
-    pub playcount: u32,
-    pub ranked_score: u64,
-    pub total_score: u64,
-    pub pp_rank: u32,
-    pub level: f32,
-    pub pp_raw: f32,
-    pub accuracy: f32,
-    pub count_rank_ss: u32,
-    pub count_rank_s: u32,
-    pub count_rank_a: u32,
-    pub update_time: DateTime<UTC>,
+pub struct DB(PooledConnection<ConnectionManager<MysqlConnection>>);
+
+impl DB {
+    pub fn conn(&self) -> &MysqlConnection {
+        &*self.0
+    }
 }
 
-/// An entry in the beatmap cache.  Holds information about a beatmap in the local database to avoid the delay of querying the osu! API for each one.
-#[derive(Queryable)]
-struct Beatmap {
-    pub id: u32,
-    pub mode: u8,
-    pub beatmapset_id: u32,
-    pub beatmap_id: u32,
-    pub approved: u8,
-    pub approved_date: DateTime<UTC>,
-    pub last_update: DateTime<UTC>,
-    pub total_length: u32,
-    pub hit_length: u32,
-    pub version: String,
-    pub artist: String,
-    pub title: String,
-    pub creator: String,
-    pub bpm: u32,
-    pub source: String,
-    pub difficulty: f32,
-    pub diff_size: u32,
-    pub diff_overall: u32,
-    pub diff_approach: u32,
-    pub diff_drain: u32,
+impl<'a, 'r> FromRequest<'a, 'r> for DB {
+    type Error = GetTimeout;
+    fn from_request(_: &'a Request<'r>) -> Outcome<Self, Self::Error> {
+        match DB_POOL.get() {
+            Ok(conn) => Success(DB(conn)),
+            Err(e) => Failure((Status::InternalServerError, e)),
+        }
+    }
 }
 
-/// A record of the number of online users in the IRC channel at a given point in time.
-#[derive(Queryable)]
-struct OnlineUsers {
-    pub id: u32,
-    pub users: u32,
-    pub ops: u32,
-    pub voiced: u32,
-    pub time_recorded: DateTime<UTC>,
-}
-
-/// Represents a hiscore achieved by a user.  Records information about the play, the beatmap, and the time the play occured was achieved and recorded.
-#[derive(Queryable)]
-struct Hiscore {
-    pub id: u32,
-    pub user_id: u32,
-    pub mode: u32,
-    pub beatmap_id: u32,
-    pub score: u32,
-    pub pp: f32,
-    pub mods: u32,
-    pub rank: u32,
-    pub score_time: DateTime<UTC>,
-    pub time_recorded: DateTime<UTC>,
+lazy_static! {
+    pub static ref DB_POOL: Pool<ConnectionManager<MysqlConnection>> = create_db_pool();
 }
 
 pub fn main() {
-    let DbCredentials{ host, username, password, database } = DB_CREDENTIALS;
-    // setup connection to the database
-    let  connection = MysqlConnection::establish(&format!("mysql://{}:{}@{}/{}", username, password, host, database))
-        .expect("Unable to connect to MySQL Database!  Please verify your credentials in `secret.rs`");
-
     // initialize the Rocket webserver
     rocket::ignite().mount("/", routes![routes::update, routes::get_stats]).launch();
 }
