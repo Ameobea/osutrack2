@@ -1,0 +1,22 @@
+CREATE TABLE beatmaps (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  mode TINYINT,
+  beatmapset_id INT,
+  beatmap_id INT,
+  approved TINYINT,
+  approved_date TIMESTAMP DEFAULT 0,
+  last_update TIMESTAMP DEFAULT 0,
+  total_length INT,
+  hit_length INT,
+  version VARCHAR(50),
+  artist VARCHAR(50),
+  title VARCHAR(50),
+  creator VARCHAR(50),
+  bpm INT,
+  source VARCHAR(50),
+  difficulty FLOAT,
+  diff_size TINYINT,
+  diff_overall TINYINT,
+  diff_approach TINYINT,
+  diff_drain TINYINT
+);
