@@ -1,0 +1,10 @@
+[package]
+name = "osutrack-backend"
+version = "0.1.0"
+authors = ["Casey Primozic <me@ameo.link>"]
+description = "osu!track API platform, interfacing with the database and exposing its information through a public API"
+
+[dependencies]
+diesel = "0.12.0"
+diesel_codegen = "0.12.0"
+rocket = "0.2.4"
