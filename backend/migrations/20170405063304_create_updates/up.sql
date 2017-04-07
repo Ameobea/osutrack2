@@ -1,7 +1,7 @@
 CREATE TABLE updates (
-  id INT AUTO_INCREMENT PRIMARY KEY,
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
   user_id INT,
-  mode TINYINT,
+  mode SMALLINT,
   count300 INT,
   count100 INT,
   count50 INT,
@@ -17,3 +17,5 @@ CREATE TABLE updates (
   count_rank_a INT,
   update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX user ON updates (user_id);

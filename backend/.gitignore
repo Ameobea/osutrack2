@@ -7,3 +7,4 @@ Cargo.lock
 Cargo.lock
 
 secret.rs
+schema.rs

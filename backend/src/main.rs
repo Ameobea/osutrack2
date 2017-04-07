@@ -9,8 +9,11 @@ extern crate chrono;
 extern crate diesel_codegen;
 #[macro_use]
 extern crate diesel;
+extern crate hyper;
+extern crate hyper_native_tls;
 #[macro_use]
 extern crate lazy_static;
+extern crate log;
 extern crate r2d2;
 extern crate r2d2_diesel;
 extern crate rocket;
@@ -30,16 +33,14 @@ use rocket::Outcome::{Success, Failure};
 use rocket::request::{FromRequest, Outcome};
 
 mod secret;
-use secret::{DB_CREDENTIALS, format_url};
+use secret::DB_CREDENTIALS;
 mod routes;
 use routes::update;
 mod schema;
-
-pub fn create_db_pool() -> Pool<ConnectionManager<MysqlConnection>> {
-    let config = Config::default();
-    let manager = ConnectionManager::<MysqlConnection>::new(format_url(DB_CREDENTIALS));
-    Pool::new(config, manager).expect("Failed to create pool.")
-}
+mod models;
+mod osu_api;
+mod helpers;
+use helpers::create_db_pool;
 
 pub struct DB(PooledConnection<ConnectionManager<MysqlConnection>>);
 
