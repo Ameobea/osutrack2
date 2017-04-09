@@ -58,7 +58,7 @@ pub struct NewUpdate {
 }
 
 /// An entry in the beatmap cache.  Holds information about a beatmap in the local database to avoid the delay of querying the osu! API for each one.
-#[derive(Queryable, Deserialize)]
+#[derive(Queryable, Deserialize, Debug)]
 pub struct Beatmap {
     pub mode: i16,
     pub beatmapset_id: i32,
@@ -72,7 +72,7 @@ pub struct Beatmap {
     pub artist: String,
     pub title: String,
     pub creator: String,
-    pub bpm: i32,
+    pub bpm: f32,
     pub source: String,
     pub difficulty: f32,
     pub diff_size: f32,

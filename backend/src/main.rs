@@ -15,7 +15,7 @@ extern crate hyper_native_tls;
 extern crate lazy_static;
 extern crate log;
 extern crate r2d2;
-extern crate r2d2_diesel;
+extern crate r2d2_diesel_mysql;
 extern crate rocket;
 #[macro_use]
 extern crate rocket_contrib;
@@ -26,7 +26,7 @@ extern crate serde_derive;
 use diesel::prelude::*;
 use diesel::mysql::MysqlConnection;
 use r2d2::{ GetTimeout, Pool, PooledConnection, Config };
-use r2d2_diesel::ConnectionManager;
+use r2d2_diesel_mysql::ConnectionManager;
 use rocket::http::Status;
 use rocket::Request;
 use rocket::Outcome::{Success, Failure};

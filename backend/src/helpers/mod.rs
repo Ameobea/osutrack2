@@ -8,7 +8,7 @@ use diesel::mysql::MysqlConnection;
 use hyper;
 use hyper::client::Response;
 use r2d2::{ GetTimeout, Pool, PooledConnection, Config };
-use r2d2_diesel::ConnectionManager;
+use r2d2_diesel_mysql::ConnectionManager;
 
 use secret::DB_CREDENTIALS;
 

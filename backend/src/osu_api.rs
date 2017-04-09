@@ -10,7 +10,7 @@ use hyper::client::Client;
 use hyper::net::HttpsConnector;
 use hyper_native_tls::NativeTlsClient;
 use r2d2::{ GetTimeout, Pool, PooledConnection, Config };
-use r2d2_diesel::ConnectionManager;
+use r2d2_diesel_mysql::ConnectionManager;
 use serde_json::{self, Value};
 
 use secret::API_KEY;
@@ -93,45 +93,37 @@ fn basic_queries() {
 
     let mut client = ApiClient::new();
     let mut conn = &*client.pool.get().unwrap();
-    let res = conn.batch_execute("SELECT 1");
+    let res = diesel::expression::dsl::sql::<::diesel::types::Bool>("SELECT 1")
+        .get_result::<bool>(conn)
+        .unwrap();
+}
+
+/// Try fetching a beatmap from the osu! API and make sure that it's parsed correctly.  Then insert it into the beatmap cache.
+#[test]
+fn test_beatmap_fetch_store() {
+    use helpers::modes::STANDARD;
+    let mut client = ApiClient::new();
+    let beatmap = client.get_beatmap(1031604, STANDARD).unwrap();
+
+    let query = diesel::insert(&beatmap)
+        .into(schema::beatmaps::dsl::beatmaps);
+    println!("{:?}", query);
+    print_sql!(query);
+    let conn: &MysqlConnection = &*client.pool.get().expect("Unable to get connection from pool");
+    let res = query.execute(conn);
     println!("{:?}", res);
 }
 
-// /// Try fetching a beatmap from the osu! API and make sure that it's parsed correctly.  Then insert it into the beatmap cache.
-// #[test]
-// fn test_beatmap_fetch_store() {
-//     use helpers::modes::STANDARD;
-//     let mut client = ApiClient::new();
-//     let beatmap = client.get_beatmap(1031604, STANDARD).unwrap();
+/// Make sure that we're able to read values back out of the database
+#[test]
+fn test_beatmap_retrieve() {
+    use schema::beatmaps::dsl::*;
+    use models::Beatmap;
 
-//     println!("{:?}", client.pool.state());
+    let mut client = ApiClient::new();
+    let conn: &MysqlConnection = &*client.pool.get().expect("Unable to get connection from pool");
+    let results = beatmaps.filter(beatmap_id.eq(1031604))
+        .load::<Beatmap>(conn);
 
-//     let query = diesel::insert(&beatmap).into(schema::beatmaps::dsl::beatmaps);
-//     // println!("{:?}", query);
-//     print_sql!(query);
-//     let conn: &MysqlConnection = &*client.pool.get().expect("Unable to get connection from pool");
-//     let res = query.execute(conn);
-//     match res {
-//         Err(err) => match err {
-//             diesel::result::Error::DatabaseError(kind, info) => {
-//                 println!("{:?}", (*info).message());
-//             }
-//             _ => panic!(),
-//         },
-//         Ok(_) => panic!(),
-//         // .expect("Unable to insert beatmap into database");
-//     }
-
-//     let query = diesel::insert(&beatmap).into(schema::beatmaps::dsl::beatmaps);
-//     let res = query.execute(conn);
-//     match res {
-//         Err(err) => match err {
-//             diesel::result::Error::DatabaseError(kind, info) => {
-//                 println!("{:?}", (*info).message());
-//             }
-//             _ => panic!(),
-//         },
-//         Ok(_) => panic!(),
-//         // .expect("Unable to insert beatmap into database");
-//     }
-// }
+    println!("{:?}", results);
+}
