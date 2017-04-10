@@ -14,7 +14,7 @@ pub struct User {
 }
 
 /// Represents an update for a user containing a snapshot of their stats at a certain point in time.
-#[derive(Queryable)]
+#[derive(Clone, Queryable)]
 pub struct Update {
     pub id: i32,
     pub user_id: i32,
@@ -110,14 +110,14 @@ pub struct Hiscore {
     pub beatmap_id: i32,
     pub score: i32,
     pub pp: f32,
-    pub mods: i32,
-    pub rank: i32,
+    pub enabled_mods: i32,
+    pub rank: String,
     pub score_time: NaiveDateTime,
     pub time_recorded: NaiveDateTime,
 }
 
 /// Represents a new hiscore set by a user, ready to be inserted into the database.
-#[derive(Insertable)]
+#[derive(Insertable, Serialize)]
 #[table_name="hiscores"]
 pub struct NewHiscore {
     pub user_id: i32,
@@ -125,7 +125,7 @@ pub struct NewHiscore {
     pub beatmap_id: i32,
     pub score: i32,
     pub pp: f32,
-    pub mods: i32,
-    pub rank: i32,
+    pub enabled_mods: i32,
+    pub rank: String,
     pub score_time: NaiveDateTime,
 }

@@ -5,8 +5,8 @@ CREATE TABLE hiscores (
   beatmap_id INT NOT NULL,
   score INT NOT NULL,
   pp FLOAT NOT NULL,
-  mods INT NOT NULL,
-  rank INT NOT NULL,
+  enabled_mods INT NOT NULL,
+  rank VARCHAR(2) NOT NULL,
   score_time TIMESTAMP DEFAULT 0 NOT NULL,
   time_recorded TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
 );

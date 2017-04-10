@@ -37,43 +37,45 @@ struct UpdateEvent {
 struct RawUpdate {
     pub user_id: String,
     pub username: String,
-    pub count300: String,
-    pub count100: String,
-    pub count50: String,
-    pub playcount: String,
-    pub ranked_score: String,
-    pub total_score: String,
-    pub pp_rank: String,
-    pub level: String,
-    pub pp_raw: String,
-    pub accuracy: String,
-    pub count_rank_ss: String,
-    pub count_rank_s: String,
-    pub count_rank_a: String,
-    pub pp_country_rank: String,
+    pub count300: Option<String>,
+    pub count100: Option<String>,
+    pub count50: Option<String>,
+    pub playcount: Option<String>,
+    pub ranked_score: Option<String>,
+    pub total_score: Option<String>,
+    pub pp_rank: Option<String>,
+    pub level: Option<String>,
+    pub pp_raw: Option<String>,
+    pub accuracy: Option<String>,
+    pub count_rank_ss: Option<String>,
+    pub count_rank_s: Option<String>,
+    pub count_rank_a: Option<String>,
+    pub pp_country_rank: Option<String>,
     pub events: Vec<UpdateEvent>,
 }
 
 impl RawUpdate {
-    /// Converts the raw representation into a representation suitable for storage in the database
-    pub fn to_update(self, mode: u8) -> Result<NewUpdate, String> {
+    /// Converts the raw representation into a representation suitable for storage in the database.  If there are stats
+    /// available for the user in the mode, will return `Ok(NewUpdate)`.  If the user exists but has no stats for the mode,
+    /// returns `Err(None)`.  If some error occured during parsing/conversion, returns `Err(Some(String))`.
+    pub fn to_update(self, mode: u8) -> Result<NewUpdate, Option<String>> {
         Ok(NewUpdate {
-            user_id: self.user_id.parse().map_err(debug)?,
+            user_id: self.user_id.parse().map_err(|err| Some(debug(err)) )?,
             mode: mode as i16,
-            count300: self.count300.parse().map_err(debug)?,
-            count100: self.count100.parse().map_err(debug)?,
-            count50: self.count50.parse().map_err(debug)?,
-            playcount: self.playcount.parse().map_err(debug)?,
-            ranked_score: self.ranked_score.parse().map_err(debug)?,
-            total_score: self.total_score.parse().map_err(debug)?,
-            pp_rank: self.pp_rank.parse().map_err(debug)?,
-            level: self.level.parse().map_err(debug)?,
-            pp_raw: self.pp_raw.parse().map_err(debug)?,
-            accuracy: self.accuracy.parse().map_err(debug)?,
-            count_rank_ss: self.count_rank_ss.parse().map_err(debug)?,
-            count_rank_s: self.count_rank_s.parse().map_err(debug)?,
-            count_rank_a: self.count_rank_a.parse().map_err(debug)?,
-            pp_country_rank: self.pp_country_rank.parse().map_err(debug)?,
+            count300: self.count300.ok_or(None)?.parse().map_err(|err| Some(debug(err)) )?,
+            count100: self.count100.ok_or(None)?.parse().map_err(|err| Some(debug(err)) )?,
+            count50: self.count50.ok_or(None)?.parse().map_err(|err| Some(debug(err)) )?,
+            playcount: self.playcount.ok_or(None)?.parse().map_err(|err| Some(debug(err)) )?,
+            ranked_score: self.ranked_score.ok_or(None)?.parse().map_err(|err| Some(debug(err)) )?,
+            total_score: self.total_score.ok_or(None)?.parse().map_err(|err| Some(debug(err)) )?,
+            pp_rank: self.pp_rank.ok_or(None)?.parse().map_err(|err| Some(debug(err)) )?,
+            level: self.level.ok_or(None)?.parse().map_err(|err| Some(debug(err)) )?,
+            pp_raw: self.pp_raw.ok_or(None)?.parse().map_err(|err| Some(debug(err)) )?,
+            accuracy: self.accuracy.ok_or(None)?.parse().map_err(|err| Some(debug(err)) )?,
+            count_rank_ss: self.count_rank_ss.ok_or(None)?.parse().map_err(|err| Some(debug(err)) )?,
+            count_rank_s: self.count_rank_s.ok_or(None)?.parse().map_err(|err| Some(debug(err)) )?,
+            count_rank_a: self.count_rank_a.ok_or(None)?.parse().map_err(|err| Some(debug(err)) )?,
+            pp_country_rank: self.pp_country_rank.ok_or(None)?.parse().map_err(|err| Some(debug(err)) )?,
         })
     }
 }
@@ -84,9 +86,9 @@ struct RawHiscore {
     pub beatmap_id: String,
     pub score: String,
     pub pp: String,
-    pub mods: String,
+    pub enabled_mods: String,
     pub rank: String,
-    pub score_time: String,
+    pub date: String,
 }
 
 impl RawHiscore {
@@ -98,9 +100,9 @@ impl RawHiscore {
             beatmap_id: self.beatmap_id.parse().map_err(debug)?,
             score: self.score.parse().map_err(debug)?,
             pp: self.pp.parse().map_err(debug)?,
-            mods: self.mods.parse().map_err(debug)?,
-            rank: self.rank.parse().map_err(debug)?,
-            score_time: NaiveDateTime::parse_from_str(&self.score_time, MYSQL_DATE_FORMAT).map_err(debug)?,
+            enabled_mods: self.enabled_mods.parse().map_err(debug)?,
+            rank: self.rank,
+            score_time: NaiveDateTime::parse_from_str(&self.date, MYSQL_DATE_FORMAT).map_err(debug)?,
         })
     }
 }
@@ -184,11 +186,17 @@ impl ApiClient {
         if raw_updates.len() == 0 {
             return Ok(None);
         }
-        Ok(Some(raw_updates[0].clone().to_update(mode)?))
+
+        Ok(Some(raw_updates[0].clone().to_update(mode).map_err(|err_opt| -> String {
+            match err_opt {
+                Some(s) => s,
+                None => format!("No stats available for user {} in that mode.", username),
+            }
+        })?))
     }
 
     pub fn get_user_best(&self, user_id: i32, mode: u8, count: u8) -> Result<Option<Vec<NewHiscore>>, String> {
-        let request_url = format!("{}/get_user_best?k={}&u={}&mode={}&count={}", API_URL, API_KEY, user_id, mode, count);
+        let request_url = format!("{}/get_user_best?k={}&u={}&m={}&limit={}", API_URL, API_KEY, user_id, mode, count);
         let res = match self.client.get(&request_url).send() {
             Ok(res) => Ok(res),
             Err(err) => Err(format!("Error while sending request to osu! API: {:?}", err)),
@@ -203,7 +211,7 @@ impl ApiClient {
         }
 
         // map all of the `RawHiscore`s into `NewHiscore`s
-        let results = Vec::with_capacity(raw_hiscores.len());
+        let mut results = Vec::with_capacity(raw_hiscores.len());
         for raw_hiscore in raw_hiscores {
             let new_hiscore = raw_hiscore.to_new_hiscore(user_id, mode)?;
             results.push(new_hiscore);
@@ -232,11 +240,8 @@ fn test_beatmap_fetch_store() {
 
     let query = diesel::insert(&beatmap)
         .into(schema::beatmaps::dsl::beatmaps);
-    // println!("{:?}", query);
-    print_sql!(query);
     let conn: &MysqlConnection = &*client.pool.get().expect("Unable to get connection from pool");
-    let res = query.execute(conn);
-    // println!("{:?}", res);
+    query.execute(conn).unwrap();
 }
 
 /// Make sure that we're able to read values back out of the database
@@ -247,10 +252,9 @@ fn test_beatmap_retrieve() {
 
     let client = ApiClient::new();
     let conn: &MysqlConnection = &*client.pool.get().expect("Unable to get connection from pool");
-    let results = beatmaps.filter(beatmap_id.eq(1031604))
-        .load::<Beatmap>(conn);
-
-    // println!("{:?}", results);
+    beatmaps.filter(beatmap_id.eq(1031604))
+        .load::<Beatmap>(conn)
+        .unwrap();
 }
 
 /// Make sure that we're able to retrieve user stats from the osu! API and parse them into a `NewUpdate`
@@ -261,7 +265,6 @@ fn test_user_stats_fetch_store() {
     // get most recent user stats from the osu! API
     let client = ApiClient::new();
     let update = client.get_stats("ameo", STANDARD).unwrap().unwrap();
-    println!("{:?}", update);
 
     // store the update into the database
     let conn: &MysqlConnection = &*client.pool.get().expect("Unable to get connection from pool");
