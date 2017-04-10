@@ -1,6 +1,6 @@
 CREATE TABLE users (
-  osu_id INT PRIMARY KEY,
-  username VARCHAR(15),
-  first_update TIMESTAMP DEFAULT 0,
-  last_update TIMESTAMP DEFAULT 0
+  osu_id INT PRIMARY KEY NOT NULL,
+  username VARCHAR(15) NOT NULL,
+  first_update TIMESTAMP DEFAULT 0 NOT NULL,
+  last_update TIMESTAMP DEFAULT 0 NOT NULL
 );

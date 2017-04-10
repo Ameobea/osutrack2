@@ -17,54 +17,38 @@ extern crate log;
 extern crate r2d2;
 extern crate r2d2_diesel_mysql;
 extern crate rocket;
-#[macro_use]
+// #[macro_use]
 extern crate rocket_contrib;
 extern crate serde_json;
 #[macro_use]
 extern crate serde_derive;
 
-use diesel::prelude::*;
 use diesel::mysql::MysqlConnection;
-use r2d2::{ GetTimeout, Pool, PooledConnection, Config };
+use r2d2::{ Pool, PooledConnection };
 use r2d2_diesel_mysql::ConnectionManager;
-use rocket::http::Status;
-use rocket::Request;
-use rocket::Outcome::{Success, Failure};
-use rocket::request::{FromRequest, Outcome};
 
 mod secret;
-use secret::DB_CREDENTIALS;
 mod routes;
-use routes::update;
 mod schema;
 mod models;
 mod osu_api;
+use osu_api::ApiClient;
 mod helpers;
 use helpers::create_db_pool;
 
-pub struct DB(PooledConnection<ConnectionManager<MysqlConnection>>);
+pub struct DbPool(Pool<ConnectionManager<MysqlConnection>>);
 
-impl DB {
-    pub fn conn(&self) -> &MysqlConnection {
-        &*self.0
+impl DbPool {
+    pub fn get_conn(&self) -> PooledConnection<ConnectionManager<MysqlConnection>> {
+        return self.0.get().unwrap()
     }
-}
-
-impl<'a, 'r> FromRequest<'a, 'r> for DB {
-    type Error = GetTimeout;
-    fn from_request(_: &'a Request<'r>) -> Outcome<Self, Self::Error> {
-        match DB_POOL.get() {
-            Ok(conn) => Success(DB(conn)),
-            Err(e) => Failure((Status::InternalServerError, e)),
-        }
-    }
-}
-
-lazy_static! {
-    pub static ref DB_POOL: Pool<ConnectionManager<MysqlConnection>> = create_db_pool();
 }
 
 pub fn main() {
     // initialize the Rocket webserver
-    rocket::ignite().mount("/", routes![routes::update, routes::get_stats]).launch();
+    rocket::ignite()
+        .mount("/", routes![routes::update, routes::get_stats, routes::get_last_pp_diff])
+        .manage(ApiClient::new())
+        .manage(DbPool(create_db_pool()))
+        .launch();
 }

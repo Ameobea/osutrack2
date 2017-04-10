@@ -13,7 +13,7 @@ pub struct User {
     pub last_update: NaiveDateTime,
 }
 
-/// Represents an update pulled fro the database.  Stored as a snapshot of a player's stats at a certain point in time.
+/// Represents an update for a user containing a snapshot of their stats at a certain point in time.
 #[derive(Queryable)]
 pub struct Update {
     pub id: i32,
@@ -32,11 +32,12 @@ pub struct Update {
     pub count_rank_ss: i32,
     pub count_rank_s: i32,
     pub count_rank_a: i32,
+    pub pp_country_rank: i32,
     pub update_time: NaiveDateTime,
 }
 
-/// Represents a new update for a user containing live, up-to-date information.
-#[derive(Insertable)]
+/// Represents a current snapshot of a user's statistics ready to be inserted in the database.
+#[derive(Debug, Insertable)]
 #[table_name="updates"]
 pub struct NewUpdate {
     pub user_id: i32,
@@ -54,37 +55,13 @@ pub struct NewUpdate {
     pub count_rank_ss: i32,
     pub count_rank_s: i32,
     pub count_rank_a: i32,
-    pub update_time: NaiveDateTime,
+    pub pp_country_rank: i32,
 }
 
 /// An entry in the beatmap cache.  Holds information about a beatmap in the local database to avoid the delay of querying the osu! API for each one.
-#[derive(Queryable, Deserialize, Debug)]
-pub struct Beatmap {
-    pub mode: i16,
-    pub beatmapset_id: i32,
-    pub beatmap_id: i32,
-    pub approved: i16,
-    pub approved_date: NaiveDateTime,
-    pub last_update: NaiveDateTime,
-    pub total_length: i32,
-    pub hit_length: i32,
-    pub version: String,
-    pub artist: String,
-    pub title: String,
-    pub creator: String,
-    pub bpm: f32,
-    pub source: String,
-    pub difficulty: f32,
-    pub diff_size: f32,
-    pub diff_overall: f32,
-    pub diff_approach: f32,
-    pub diff_drain: f32,
-}
-
-/// Represents beatmap metadata fetched from the osu! API, ready to be inserted into the beatmap cache.
-#[derive(Insertable, Debug)]
+#[derive(Queryable, Insertable, Deserialize, Debug)]
 #[table_name = "beatmaps"]
-pub struct NewBeatmap {
+pub struct Beatmap {
     pub mode: i16,
     pub beatmapset_id: i32,
     pub beatmap_id: i32,

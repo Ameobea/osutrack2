@@ -2,12 +2,11 @@ pub mod modes;
 
 use std::io::Read;
 use std::fmt::Debug;
-use std::collections::HashMap;
 
 use diesel::mysql::MysqlConnection;
 use hyper;
 use hyper::client::Response;
-use r2d2::{ GetTimeout, Pool, PooledConnection, Config };
+use r2d2::{ Pool, Config };
 use r2d2_diesel_mysql::ConnectionManager;
 
 use secret::DB_CREDENTIALS;
@@ -24,7 +23,7 @@ pub fn process_response(mut res: Response) -> Result<String, String> {
     }?;
 
     let mut s = String::new();
-    res.read_to_string(&mut s);
+    res.read_to_string(&mut s).map_err(debug)?;
 
     Ok(s)
 }
