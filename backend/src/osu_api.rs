@@ -1,10 +1,12 @@
 //! Functions or interfacing with the osu! API
 
 use std::collections::HashMap;
+use std::thread;
 
 use chrono::NaiveDateTime;
 use diesel;
 use diesel::prelude::*;
+use diesel::result::Error;
 use diesel::mysql::MysqlConnection;
 use hyper::client::Client;
 use hyper::net::HttpsConnector;
@@ -14,8 +16,9 @@ use r2d2_diesel_mysql::ConnectionManager;
 use serde_json;
 
 use secret::API_KEY;
-use models::{Beatmap, NewUpdate, NewHiscore};
+use models::{Beatmap, NewUpdate, NewHiscore, User, NewUser};
 use schema;
+use schema::users::dsl as users_dsl;
 use helpers::{debug, process_response, parse_pair, MYSQL_DATE_FORMAT, create_db_pool};
 
 const API_URL: &'static str = "https://osu.ppy.sh/api";
@@ -186,8 +189,45 @@ impl ApiClient {
         if raw_updates.len() == 0 {
             return Ok(None);
         }
+        let raw_update = raw_updates[0].clone();
 
-        Ok(Some(raw_updates[0].clone().to_update(mode).map_err(|err_opt| -> String {
+        // in another thread, check if the user is in the database already.  If they are, make sure that their userid
+        // and username match, updating them if they aren't.  If they're not in the db, add them.
+        let pool = self.pool.clone();
+        let update_clone = raw_update.clone();
+        thread::spawn(move || {
+            let conn: &MysqlConnection = &*pool.get().map_err(debug).expect("Unable to get connection from pool in thread!");
+            let user_id: i32 = update_clone.user_id.parse().expect("Unable to parse user_id from string to i32");
+            match users_dsl::users.find(user_id).first(conn) {
+                Ok(usr) => {
+                    // a user row exists for this user id, so check that the usernames match
+                    let usr: User = usr;
+                    diesel::update(users_dsl::users.find(usr.id))
+                        .set(users_dsl::username.eq(&update_clone.username))
+                        .execute(conn)
+                        .expect("Error while updating username");
+                },
+                Err(err) => {
+                    // no user row exists, so insert one.
+                    match err {
+                        Error::NotFound => {
+                            let usr = NewUser {
+                                id: user_id,
+                                username: update_clone.username,
+                            };
+
+                            diesel::insert(&usr)
+                                .into(users_dsl::users)
+                                .execute(conn)
+                                .expect("Unable to insert new user row into database.");
+                        },
+                        _ => println!("Unexpected error occured when searching database for username: {:?}", err),
+                    }
+                },
+            }
+        });
+
+        Ok(Some(raw_update.to_update(mode).map_err(|err_opt| -> String {
             match err_opt {
                 Some(s) => s,
                 None => format!("No stats available for user {} in that mode.", username),

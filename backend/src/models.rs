@@ -4,17 +4,28 @@ use chrono::NaiveDateTime;
 use schema::{users, updates, hiscores, beatmaps, online_users};
 
 /// Represents a user.  Maps our internal id to the osu! id and contains the last time the user was updated.
-#[derive(Queryable, Insertable)]
-#[table_name="users"]
+#[derive(Associations, Identifiable, Queryable)]
+#[has_many(updates)]
+#[has_many(hiscores)]
 pub struct User {
-    pub osu_id: i32,
+    pub id: i32,
     pub username: String,
     pub first_update: NaiveDateTime,
     pub last_update: NaiveDateTime,
 }
 
+/// A new user, ready to be inserted into the database.  Maps usernames to osu_ids and holds metadata about the first and most
+/// recent times the user was updated.
+#[derive(Insertable)]
+#[table_name="users"]
+pub struct NewUser {
+    pub id: i32,
+    pub username: String,
+}
+
 /// Represents an update for a user containing a snapshot of their stats at a certain point in time.
-#[derive(Clone, Queryable)]
+#[derive(Associations, Clone, Identifiable, Serialize, Queryable)]
+#[belongs_to(User)]
 pub struct Update {
     pub id: i32,
     pub user_id: i32,
@@ -37,7 +48,7 @@ pub struct Update {
 }
 
 /// Represents a current snapshot of a user's statistics ready to be inserted in the database.
-#[derive(Debug, Insertable)]
+#[derive(Associations, Debug, Insertable)]
 #[table_name="updates"]
 pub struct NewUpdate {
     pub user_id: i32,
@@ -102,7 +113,8 @@ pub struct NewOnlineUsers {
 }
 
 /// Represents a hiscore achieved by a user.  Records information about the play, the beatmap, and the time the play occured was achieved and recorded.
-#[derive(Queryable)]
+#[derive(Associations, Queryable)]
+#[belongs_to(User)]
 pub struct Hiscore {
     pub id: i32,
     pub user_id: i32,

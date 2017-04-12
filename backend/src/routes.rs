@@ -3,15 +3,18 @@
 use chrono::NaiveDateTime;
 use diesel;
 use diesel::prelude::*;
+use diesel::result::Error;
+use diesel::BelongingToDsl;
 use rocket::State;
 use rocket_contrib::JSON;
 
 use super::DbPool;
 use helpers::debug;
-use models::{Update, NewUpdate, Hiscore, NewHiscore};
+use models::{Update, NewUpdate, Hiscore, NewHiscore, User};
 use osu_api::ApiClient;
 use schema::updates::dsl as updates_dsl;
 use schema::hiscores::dsl as hiscores_dsl;
+use schema::users::dsl as users_dsl;
 
 /// Holds the changes between two updates
 #[derive(Serialize)]
@@ -180,9 +183,32 @@ pub fn update(
     }
 }
 
-/// Returns current static statistics for a user
+/// Returns current static statistics for a user as stored in the osu!track database.  Designed to be extrememly fast and
+/// avoid the osu! server round-trip involved with getting live stats.  Returns a 404 if there is no stored updates for the
+/// user in the selected mode.
 #[get("/stats/<username>/<mode>")]
-pub fn get_stats(api_client: State<ApiClient>, username: &str, mode: u8) -> Option<JSON<Stats>> {
+pub fn get_stats(db_pool: State<DbPool>, username: &str, mode: u8) -> Result<Option<JSON<Update>>, String> {
+    let db_conn = &*db_pool.get_conn();
+
+    let usr: User = match users_dsl::users.filter(users_dsl::username.eq(username)).first(db_conn) {
+        Ok(usr) => usr,
+        Err(err) => match err {
+            Error::NotFound => { return Ok(None); },
+            _ => { return Err(format!("Error while getting user row from database: {:?}", err)); },
+        }
+    };
+
+    Update::belonging_to(&usr)
+        .order(updates_dsl::id.desc())
+        .first(db_conn)
+        .map(|x| Some(JSON(x)))
+        .map_err(debug)
+}
+
+/// Returns the live view of a user's stats as reported by the osu! API.  Functions the same way as the `/update/` endpoint
+/// but returns the current statistics rather than the change since the last update
+#[get("/livestats/<username>/<mode>")]
+pub fn live_stats(api_client: State<ApiClient>, username: &str, mode: u8) -> Option<JSON<Stats>> {
     unimplemented!(); // TODO
 }
 
