@@ -47,7 +47,10 @@ impl DbPool {
 pub fn main() {
     // initialize the Rocket webserver
     rocket::ignite()
-        .mount("/", routes![routes::update, routes::get_stats, routes::get_last_pp_diff, routes::live_stats])
+        .mount("/", routes![
+            routes::update, routes::get_stats, routes::get_last_pp_diff, routes::live_stats, routes::get_updates,
+            routes::get_hiscores,
+        ])
         .manage(ApiClient::new())
         .manage(DbPool(create_db_pool()))
         .launch();

@@ -3,18 +3,16 @@
 use chrono::NaiveDateTime;
 use diesel;
 use diesel::prelude::*;
-use diesel::result::Error;
 use diesel::BelongingToDsl;
 use rocket::State;
 use rocket_contrib::JSON;
 
 use super::DbPool;
-use helpers::debug;
+use helpers::{debug, get_user_from_username, get_last_update};
 use models::{Update, NewUpdate, Hiscore, NewHiscore, User};
 use osu_api::ApiClient;
 use schema::updates::dsl as updates_dsl;
 use schema::hiscores::dsl as hiscores_dsl;
-use schema::users::dsl as users_dsl;
 
 /// Holds the changes between two updates
 #[derive(Serialize)]
@@ -97,24 +95,6 @@ impl UpdateDiff {
     }
 }
 
-/// A snapshot of a User's statistics at a specific point in time
-#[derive(Serialize)]
-pub struct Stats {
-    pub count300: i32,
-    pub count100: i32,
-    pub count50: i32,
-    pub playcount: i32,
-    pub ranked_score: i32,
-    pub total_score: i32,
-    pub pp_rank: i32,
-    pub level: f32,
-    pub pp_raw: f32,
-    pub accuracy: f32,
-    pub count_rank_ss: i32,
-    pub count_rank_s: i32,
-    pub count_rank_a: i32,
-}
-
 /// Updates a user's stats using the osu! API and returns the changes since the last recorded update.
 #[get("/update/<username>/<mode>")]
 pub fn update(
@@ -127,18 +107,11 @@ pub fn update(
     match stats {
         None => { return Ok(None); },
         Some(s) => {
-            // find the most recent update in the same game mode
-            let last_update: Vec<Update> = updates_dsl::updates
-                .filter(updates_dsl::user_id.eq(s.user_id))
-                .filter(updates_dsl::mode.eq(mode as i16))
-                .order(updates_dsl::id.desc())
-                .limit(1)
-                .load::<Update>(db_conn)
-                .map_err(debug)?;
+            let last_update: Option<Update> = get_last_update(s.user_id, mode, db_conn)?;
 
             // if there was a change worth recording between the two updates, write it to the database
-            let needs_insert = if last_update.len() > 0 {
-                let first = last_update.first().unwrap();
+            let needs_insert = if last_update.is_some() {
+                let first = last_update.unwrap();
                 first.pp_rank != s.pp_rank ||
                     s.playcount != s.playcount ||
                     s.pp_country_rank != s.pp_country_rank
@@ -167,7 +140,7 @@ pub fn update(
             };
 
             // calculate the diff between the last and current updates
-            let diff = UpdateDiff::diff(last_update.first(), &s, old_hiscores, cur_hiscores);
+            let diff = UpdateDiff::diff(last_update.map(|u| &u), &s, old_hiscores, cur_hiscores);
 
             // insert all new hiscores into the database
             diesel::insert(&diff.newhs)
@@ -190,16 +163,14 @@ pub fn update(
 pub fn get_stats(db_pool: State<DbPool>, username: &str, mode: u8) -> Result<Option<JSON<Update>>, String> {
     let db_conn = &*db_pool.get_conn();
 
-    let usr: User = match users_dsl::users.filter(users_dsl::username.eq(username)).first(db_conn) {
-        Ok(usr) => usr,
-        Err(err) => match err {
-            Error::NotFound => { return Ok(None); },
-            _ => { return Err(format!("Error while getting user row from database: {:?}", err)); },
-        }
+    let usr: User = match get_user_from_username(db_conn, username)? {
+        Some(usr) => usr,
+        None => { return Ok(None); },
     };
 
     Update::belonging_to(&usr)
         .order(updates_dsl::id.desc())
+        .filter(updates_dsl::mode.eq(mode as i16))
         .first(db_conn)
         .map(|x| Some(JSON(x)))
         .map_err(debug)
@@ -208,8 +179,90 @@ pub fn get_stats(db_pool: State<DbPool>, username: &str, mode: u8) -> Result<Opt
 /// Returns the live view of a user's stats as reported by the osu! API.  Functions the same way as the `/update/` endpoint
 /// but returns the current statistics rather than the change since the last update
 #[get("/livestats/<username>/<mode>")]
-pub fn live_stats(api_client: State<ApiClient>, username: &str, mode: u8) -> Option<JSON<Stats>> {
-    unimplemented!(); // TODO
+pub fn live_stats(
+    api_client: State<ApiClient>, db_pool: State<DbPool>, username: &str, mode: u8
+) -> Result<Option<JSON<NewUpdate>>, String> {
+    let client = api_client.inner();
+    let db_conn = &*db_pool.get_conn();
+
+    let stats: NewUpdate = match client.get_stats(username, mode)? {
+        Some(u) => u,
+        None => { return Ok(None); },
+    };
+
+    // check to see if the user exists in our database yet.  If it doesn't, it will soon because the `get_stats()`
+    // function inserts it on another thread.
+    let usr: User = match get_user_from_username(db_conn, username)? {
+        Some(usr) => usr,
+        None => {
+            // this means that the DB is currently in the process of inserting the user and update, so we don't need to bother
+            return Ok(Some(JSON(stats)));
+        },
+    };
+
+    // find the last stored update for the user and, if there has been a change, insert a new update
+    let last_update = get_last_update(user_id, mode, connection)?;
+
+    // if there was a change worth recording between the two updates, write it to the database
+    let needs_insert = if last_update.is_some() {
+        let first = last_update.unwrap();
+        first.pp_rank != stats.pp_rank ||
+            stats.playcount != stats.playcount ||
+            stats.pp_country_rank != stats.pp_country_rank
+    } else {
+        true
+    };
+
+    if needs_insert {
+        diesel::insert(&update_clone)
+            .into(updates_dsl::updates)
+            .execute(conn)
+            .map_err(debug)?;
+    }
+
+    Ok(Some(JSON(stats)))
+}
+
+/// Returns all of a user's stored updates for a given gamemode.
+#[get("/updates/<username>/<mode>")]
+pub fn get_updates(db_pool: State<DbPool>, username: &str, mode: u8) -> Result<Option<JSON<Vec<Update>>>, String> {
+    let db_conn = &*db_pool.get_conn();
+
+    let usr: User = match get_user_from_username(db_conn, username)? {
+        Some(user) => user,
+        None => { return Ok(None); },
+    };
+
+    // pull all updates belonging to the selected user from the database for the provided gamemode
+    let updates = updates_dsl::updates
+        .filter(updates_dsl::user_id.eq(usr.id))
+        .filter(updates_dsl::mode.eq(mode as i16))
+        .order(updates_dsl::update_time.asc())
+        .load::<Update>(db_conn)
+        .map_err(debug)?;
+
+    Ok(Some(JSON(updates)))
+}
+
+/// Returns all of a user's stored hsicores for a given gamemode.
+#[get("/hiscores/<username>/<mode>")]
+pub fn get_hiscores(db_pool: State<DbPool>, username: &str, mode: u8) -> Result<Option<JSON<Vec<Hiscore>>>, String> {
+    let db_conn = &*db_pool.get_conn();
+
+    let usr: User = match get_user_from_username(db_conn, username)? {
+        Some(user) => user,
+        None => { return Ok(None); },
+    };
+
+    // pull all hiscores belonging to the selected user from the database for the provided gamemode
+    let hiscores = hiscores_dsl::hiscores
+        .filter(hiscores_dsl::user_id.eq(usr.id))
+        .filter(hiscores_dsl::mode.eq(mode as i16))
+        .order(hiscores_dsl::score_time.asc())
+        .load::<Hiscore>(db_conn)
+        .map_err(debug)?;
+
+    Ok(Some(JSON(hiscores)))
 }
 
 /// Returns the difference between a user's current stats and the last time their total PP score was different than its

@@ -48,7 +48,7 @@ pub struct Update {
 }
 
 /// Represents a current snapshot of a user's statistics ready to be inserted in the database.
-#[derive(Associations, Debug, Insertable)]
+#[derive(Associations, Debug, Insertable, Serialize)]
 #[table_name="updates"]
 pub struct NewUpdate {
     pub user_id: i32,
@@ -113,7 +113,7 @@ pub struct NewOnlineUsers {
 }
 
 /// Represents a hiscore achieved by a user.  Records information about the play, the beatmap, and the time the play occured was achieved and recorded.
-#[derive(Associations, Queryable)]
+#[derive(Associations, Queryable, Serialize)]
 #[belongs_to(User)]
 pub struct Hiscore {
     pub id: i32,

@@ -223,6 +223,13 @@ impl ApiClient {
                         },
                         _ => println!("Unexpected error occured when searching database for username: {:?}", err),
                     }
+
+                    // This is the first update for that user, so store this one
+                    diesel::insert(&update_clone)
+                        .into(updates_dsl::updates)
+                        .execute(conn)
+                        .map_err(debug)
+                        .expect("Error while inserting first update into database");
                 },
             }
         });
