@@ -3,8 +3,8 @@ CREATE TABLE beatmaps (
   beatmapset_id INT NOT NULL,
   beatmap_id INT NOT NULL PRIMARY KEY,
   approved SMALLINT NOT NULL,
-  approved_date TIMESTAMP DEFAULT 0 NOT NULL,
-  last_update TIMESTAMP DEFAULT 0 NOT NULL,
+  approved_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+  last_update TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
   total_length INT NOT NULL,
   hit_length INT NOT NULL,
   version VARCHAR(50) NOT NULL,
@@ -20,4 +20,4 @@ CREATE TABLE beatmaps (
   diff_drain FLOAT NOT NULL
 );
 
-ALTER TABLE `beatmaps` DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_bin;
+ALTER TABLE `beatmaps` DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;

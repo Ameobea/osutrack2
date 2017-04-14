@@ -111,7 +111,7 @@ pub fn update(
 
             // if there was a change worth recording between the two updates, write it to the database
             let needs_insert = if last_update.is_some() {
-                let first = last_update.unwrap();
+                let first = last_update.as_ref().unwrap();
                 first.pp_rank != s.pp_rank ||
                     s.playcount != s.playcount ||
                     s.pp_country_rank != s.pp_country_rank
@@ -140,7 +140,7 @@ pub fn update(
             };
 
             // calculate the diff between the last and current updates
-            let diff = UpdateDiff::diff(last_update.map(|u| &u), &s, old_hiscores, cur_hiscores);
+            let diff = UpdateDiff::diff(last_update.as_ref(), &s, old_hiscores, cur_hiscores);
 
             // insert all new hiscores into the database
             diesel::insert(&diff.newhs)
@@ -201,7 +201,7 @@ pub fn live_stats(
     };
 
     // find the last stored update for the user and, if there has been a change, insert a new update
-    let last_update = get_last_update(user_id, mode, connection)?;
+    let last_update = get_last_update(usr.id, mode, db_conn)?;
 
     // if there was a change worth recording between the two updates, write it to the database
     let needs_insert = if last_update.is_some() {
@@ -214,9 +214,9 @@ pub fn live_stats(
     };
 
     if needs_insert {
-        diesel::insert(&update_clone)
+        diesel::insert(&stats)
             .into(updates_dsl::updates)
-            .execute(conn)
+            .execute(db_conn)
             .map_err(debug)?;
     }
 

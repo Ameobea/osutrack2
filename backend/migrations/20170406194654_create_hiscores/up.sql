@@ -7,10 +7,11 @@ CREATE TABLE hiscores (
   pp FLOAT NOT NULL,
   enabled_mods INT NOT NULL,
   rank VARCHAR(2) NOT NULL,
-  score_time TIMESTAMP DEFAULT 0 NOT NULL,
+  score_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
   time_recorded TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
 CREATE INDEX user ON hiscores (user_id);
-
 CREATE INDEX pp ON hiscores(pp);
+
+ALTER TABLE `hiscores` DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;

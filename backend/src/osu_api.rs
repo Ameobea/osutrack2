@@ -19,6 +19,7 @@ use secret::API_KEY;
 use models::{Beatmap, NewUpdate, NewHiscore, User, NewUser};
 use schema;
 use schema::users::dsl as users_dsl;
+use schema::updates::dsl as updates_dsl;
 use helpers::{debug, process_response, parse_pair, MYSQL_DATE_FORMAT, create_db_pool};
 
 const API_URL: &'static str = "https://osu.ppy.sh/api";
@@ -190,20 +191,27 @@ impl ApiClient {
             return Ok(None);
         }
         let raw_update = raw_updates[0].clone();
+        let raw_clone = raw_update.clone();
+        let parsed_update = raw_update.to_update(mode).map_err(|err_opt| -> String {
+            match err_opt {
+                Some(s) => s,
+                None => format!("No stats available for user {} in that mode.", username),
+            }
+        })?;
 
         // in another thread, check if the user is in the database already.  If they are, make sure that their userid
         // and username match, updating them if they aren't.  If they're not in the db, add them.
         let pool = self.pool.clone();
-        let update_clone = raw_update.clone();
+        let parsed_clone = parsed_update.clone();
         thread::spawn(move || {
             let conn: &MysqlConnection = &*pool.get().map_err(debug).expect("Unable to get connection from pool in thread!");
-            let user_id: i32 = update_clone.user_id.parse().expect("Unable to parse user_id from string to i32");
+            let user_id: i32 = raw_clone.user_id.parse().expect("Unable to parse user_id from string to i32");
             match users_dsl::users.find(user_id).first(conn) {
                 Ok(usr) => {
                     // a user row exists for this user id, so check that the usernames match
                     let usr: User = usr;
                     diesel::update(users_dsl::users.find(usr.id))
-                        .set(users_dsl::username.eq(&update_clone.username))
+                        .set(users_dsl::username.eq(&raw_clone.username))
                         .execute(conn)
                         .expect("Error while updating username");
                 },
@@ -213,7 +221,7 @@ impl ApiClient {
                         Error::NotFound => {
                             let usr = NewUser {
                                 id: user_id,
-                                username: update_clone.username,
+                                username: raw_clone.username,
                             };
 
                             diesel::insert(&usr)
@@ -225,7 +233,7 @@ impl ApiClient {
                     }
 
                     // This is the first update for that user, so store this one
-                    diesel::insert(&update_clone)
+                    diesel::insert(&parsed_clone)
                         .into(updates_dsl::updates)
                         .execute(conn)
                         .map_err(debug)
@@ -234,12 +242,7 @@ impl ApiClient {
             }
         });
 
-        Ok(Some(raw_update.to_update(mode).map_err(|err_opt| -> String {
-            match err_opt {
-                Some(s) => s,
-                None => format!("No stats available for user {} in that mode.", username),
-            }
-        })?))
+        Ok(Some(parsed_update))
     }
 
     pub fn get_user_best(&self, user_id: i32, mode: u8, count: u8) -> Result<Option<Vec<NewHiscore>>, String> {

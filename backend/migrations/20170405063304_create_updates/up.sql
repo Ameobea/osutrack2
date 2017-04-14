@@ -20,3 +20,4 @@ CREATE TABLE updates (
 );
 
 CREATE INDEX user ON updates (user_id);
+ALTER TABLE `updates` DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;

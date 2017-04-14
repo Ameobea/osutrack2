@@ -13,7 +13,6 @@ use r2d2_diesel_mysql::ConnectionManager;
 
 use secret::DB_CREDENTIALS;
 use models::{User, Update};
-use schema;
 
 /// Utility function for making sure that a response is a 200 and then reading it into a String
 pub fn process_response(mut res: Response) -> Result<String, String> {
@@ -70,13 +69,13 @@ pub fn get_user_from_username(connection: &MysqlConnection, username: &str) -> R
 pub fn get_last_update(user_id: i32, mode: u8, connection: &MysqlConnection) -> Result<Option<Update>, String> {
     use schema::updates::dsl as updates_dsl;
 
-    let last_updates: Vec<Update> = updates_dsl::updates
+    let mut updates: Vec<Update> = updates_dsl::updates
         .filter(updates_dsl::user_id.eq(user_id))
         .filter(updates_dsl::mode.eq(mode as i16))
-        .order(updates_dsl::id.desc())
+        .order(updates_dsl::update_time.desc())
         .limit(1)
         .load::<Update>(connection)
         .map_err(debug)?;
 
-    if last_updates.len() == 0 { Ok(None) } else { Ok(Some(last_updates[0])) }
+    if updates.len() == 0 { Ok(None) } else { Ok(Some(updates.drain(..).next().unwrap())) }
 }

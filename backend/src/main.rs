@@ -11,8 +11,6 @@ extern crate diesel_codegen;
 extern crate diesel;
 extern crate hyper;
 extern crate hyper_native_tls;
-#[macro_use]
-extern crate lazy_static;
 extern crate log;
 extern crate r2d2;
 extern crate r2d2_diesel_mysql;

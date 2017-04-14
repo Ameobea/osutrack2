@@ -4,3 +4,5 @@ CREATE TABLE online_users (
   operators INT NOT NULL,
   voiced INT NOT NULL
 );
+
+ALTER TABLE `online_users` DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_general_ci;

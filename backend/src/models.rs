@@ -48,7 +48,7 @@ pub struct Update {
 }
 
 /// Represents a current snapshot of a user's statistics ready to be inserted in the database.
-#[derive(Associations, Debug, Insertable, Serialize)]
+#[derive(Associations, Clone, Debug, Insertable, Serialize)]
 #[table_name="updates"]
 pub struct NewUpdate {
     pub user_id: i32,
