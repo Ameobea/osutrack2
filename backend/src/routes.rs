@@ -1,15 +1,18 @@
 //! Maps the API endpoints to functions
 
+use std::collections::HashMap;
+
 use chrono::NaiveDateTime;
 use diesel;
 use diesel::prelude::*;
 use diesel::BelongingToDsl;
 use rocket::State;
 use rocket_contrib::JSON;
+use serde_json;
 
 use super::DbPool;
 use helpers::{debug, get_user_from_username, get_last_update};
-use models::{Update, NewUpdate, Hiscore, NewHiscore, User};
+use models::{Beatmap, Update, NewUpdate, Hiscore, NewHiscore, User};
 use osu_api::ApiClient;
 use schema::updates::dsl as updates_dsl;
 use schema::hiscores::dsl as hiscores_dsl;
@@ -342,4 +345,28 @@ pub fn get_last_pp_diff(
             Ok(Some(JSON(UpdateDiff::diff(last_different_update, &s, old_hiscores, cur_hiscores))))
         }
     }
+}
+
+/// Returns data for a set of beatmaps.  It first attempts to retrieve them from the database but if they aren't
+/// stored, they will be retrieved from the osu! API and inserted.  Returns a JSON-encoded hap of beatmap_id:beatmap
+#[get("/beatmaps/<ids>/<mode>")]
+pub fn get_beatmaps(
+    api_client: State<ApiClient>, db_pool: State<DbPool>, ids: &str, mode: u8
+) -> Result<Option<JSON<HashMap<i32, Beatmap>>>, String> {
+    let ids: Vec<i32> = serde_json::from_str(ids).map_err(debug)?;
+    // TODO: Search the database and find all beatmaps that have IDs that are included in the parsed vector of ids.
+    // TODO: Retrieve all beatmaps from the API (preferrably asynchronously) that are not contained in the database
+    // TODO: Package up all results and return them
+    unimplemented!();
+}
+
+/// Returns data for one beatmap.  It first attempts to retrieve the data from the database if it isn't found there
+/// it is retrieved from the osu! API and inserted.
+#[get("/beatmap/<id>/<mode>")]
+pub fn get_beatmap(
+    api_client: State<ApiClient>, db_pool: State<DbPool>, id: i32, mode: u8
+) -> Result<Option<JSON<Beatmap>>, String> {
+    // TODO: Search the database for the beatmap with the supplied id
+    // TODO: if not found in the database, return it from the API.
+    unimplemented!();
 }

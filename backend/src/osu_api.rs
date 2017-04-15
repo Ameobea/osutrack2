@@ -20,6 +20,7 @@ use models::{Beatmap, NewUpdate, NewHiscore, User, NewUser};
 use schema;
 use schema::users::dsl as users_dsl;
 use schema::updates::dsl as updates_dsl;
+use schema::beatmaps::dsl as beatmaps_dsl;
 use helpers::{debug, process_response, parse_pair, MYSQL_DATE_FORMAT, create_db_pool};
 
 const API_URL: &'static str = "https://osu.ppy.sh/api";
@@ -171,6 +172,20 @@ impl ApiClient {
             diff_approach: parse_pair(&first.get("diff_approach").unwrap()),
             diff_drain: parse_pair(&first.get("diff_drain").unwrap()),
         };
+
+        // insert the beatmap into the database in a separate thread
+        let pool = self.pool.clone();
+        let beatmap_clone = beatmap.clone();
+        thread::spawn(move || {
+            let conn: &MysqlConnection = &*pool.get().expect("Unable to get connection from pool");
+            match diesel::insert(&beatmap_clone)
+                .into(beatmaps_dsl::beatmaps)
+                .execute(conn)
+            {
+                Ok(_) => (),
+                Err(err) => println!("Error while attempting to insert beatmap into beatmap cache: {:?}", err),
+            }
+        });
 
         Ok(Some(beatmap))
     }

@@ -47,7 +47,7 @@ pub fn main() {
     rocket::ignite()
         .mount("/", routes![
             routes::update, routes::get_stats, routes::get_last_pp_diff, routes::live_stats, routes::get_updates,
-            routes::get_hiscores,
+            routes::get_hiscores, routes::get_beatmaps, routes::get_beatmap,
         ])
         .manage(ApiClient::new())
         .manage(DbPool(create_db_pool()))
