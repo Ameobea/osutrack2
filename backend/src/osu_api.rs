@@ -8,20 +8,16 @@ use diesel;
 use diesel::prelude::*;
 use diesel::result::Error;
 use diesel::mysql::MysqlConnection;
-use hyper::client::Client;
-use hyper::net::HttpsConnector;
-use hyper_native_tls::NativeTlsClient;
 use r2d2::Pool;
-use r2d2_diesel_mysql::ConnectionManager;
+use r2d2_diesel::ConnectionManager;
 use serde_json;
 
 use secret::API_KEY;
 use models::{Beatmap, NewUpdate, NewHiscore, User, NewUser};
-use schema;
 use schema::users::dsl as users_dsl;
 use schema::updates::dsl as updates_dsl;
 use schema::beatmaps::dsl as beatmaps_dsl;
-use helpers::{debug, process_response, parse_pair, MYSQL_DATE_FORMAT, create_db_pool};
+use helpers::{debug, parse_pair, MYSQL_DATE_FORMAT, create_db_pool, get_url};
 
 const API_URL: &'static str = "https://osu.ppy.sh/api";
 const DATE_PARSE_ERROR: &'static str = "Unable to parse supplied datetime string into `NaiveDateTime`";
@@ -114,34 +110,20 @@ impl RawHiscore {
 
 /// A client used to interface with the osu! API.
 pub struct ApiClient {
-    client: Client,
     pool: Pool<ConnectionManager<MysqlConnection>>,
 }
 
 impl ApiClient {
     pub fn new() -> ApiClient {
-        let ssl = NativeTlsClient::new().unwrap();
-        let connector = HttpsConnector::new(ssl);
-        let client = Client::with_connector(connector);
-
-        ApiClient {
-            client: client,
-            pool: create_db_pool(),
-        }
+        ApiClient { pool: create_db_pool() }
     }
 
     /// Fetches beatmap metadata from the osu! API, automatically updating the internal betamap cache with the data.
     pub fn get_beatmap(&self, beatmap_id: usize, mode: u8) -> Result<Option<Beatmap>, String> {
-        let request_url = format!("{}/get_beatmaps?k={}&m={}&b={}", API_URL, API_KEY, mode, beatmap_id);
-        let res = match self.client.get(&request_url).send() {
-            Ok(res) => Ok(res),
-            Err(err) => Err(format!("Error while sending request to osu! API: {:?}", err)),
-        }?;
+        let res = get_url(&format!("{}/get_beatmaps?k={}&m={}&b={}", API_URL, API_KEY, mode, beatmap_id))?;
 
-        // make sure that the response was what we expect it to be, a 200, and process it into a string
-        let res_string: String = process_response(res)?;
         // try to parse the response into a vector of `String`:`String` `HashMap`s
-        let raw: Vec<HashMap<String, String>> = serde_json::from_str(&res_string).map_err(debug)?;
+        let raw: Vec<HashMap<String, String>> = serde_json::from_str(&res).map_err(debug)?;
         // make sure that we actually got a response
         if raw.len() == 0 {
             return Ok(None);
@@ -178,8 +160,8 @@ impl ApiClient {
         let beatmap_clone = beatmap.clone();
         thread::spawn(move || {
             let conn: &MysqlConnection = &*pool.get().expect("Unable to get connection from pool");
-            match diesel::insert(&beatmap_clone)
-                .into(beatmaps_dsl::beatmaps)
+            match diesel::insert_into(beatmaps_dsl::beatmaps)
+                .values(&beatmap_clone)
                 .execute(conn)
             {
                 Ok(_) => (),
@@ -192,16 +174,9 @@ impl ApiClient {
 
     /// Returns a user's current stats for a given gamemode.
     pub fn get_stats(&self, username: &str, mode: u8) -> Result<Option<NewUpdate>, String> {
-        let request_url = format!("{}/get_user?k={}&u={}&m={}", API_URL, API_KEY, username, mode);
-        let res = match self.client.get(&request_url).send() {
-            Ok(res) => Ok(res),
-            Err(err) => Err(format!("Error while sending request to osu! API: {:?}", err)),
-        }?;
+        let res = get_url(&format!("{}/get_user?k={}&u={}&m={}", API_URL, API_KEY, username, mode))?;
 
-        // make sure that the response was what we expect it to be, a 200, and process it into a string
-        let res_string: String = process_response(res)?;
-
-        let raw_updates: Vec<RawUpdate> = serde_json::from_str(&res_string).map_err(debug)?;
+        let raw_updates: Vec<RawUpdate> = serde_json::from_str(&res).map_err(debug)?;
         if raw_updates.len() == 0 {
             return Ok(None);
         }
@@ -239,8 +214,8 @@ impl ApiClient {
                                 username: raw_clone.username,
                             };
 
-                            diesel::insert(&usr)
-                                .into(users_dsl::users)
+                            diesel::insert_into(users_dsl::users)
+                                .values(&usr)
                                 .execute(conn)
                                 .expect("Unable to insert new user row into database.");
                         },
@@ -248,8 +223,8 @@ impl ApiClient {
                     }
 
                     // This is the first update for that user, so store this one
-                    diesel::insert(&parsed_clone)
-                        .into(updates_dsl::updates)
+                    diesel::insert_into(updates_dsl::updates)
+                        .values(&parsed_clone)
                         .execute(conn)
                         .map_err(debug)
                         .expect("Error while inserting first update into database");
@@ -261,16 +236,9 @@ impl ApiClient {
     }
 
     pub fn get_user_best(&self, user_id: i32, mode: u8, count: u8) -> Result<Option<Vec<NewHiscore>>, String> {
-        let request_url = format!("{}/get_user_best?k={}&u={}&m={}&limit={}", API_URL, API_KEY, user_id, mode, count);
-        let res = match self.client.get(&request_url).send() {
-            Ok(res) => Ok(res),
-            Err(err) => Err(format!("Error while sending request to osu! API: {:?}", err)),
-        }?;
+        let res = get_url(&format!("{}/get_user_best?k={}&u={}&m={}&limit={}", API_URL, API_KEY, user_id, mode, count))?;
 
-        // make sure that the response was what we expect it to be, a 200, and process it into a string
-        let res_string: String = process_response(res)?;
-
-        let raw_hiscores: Vec<RawHiscore> = serde_json::from_str(&res_string).map_err(debug)?;
+        let raw_hiscores: Vec<RawHiscore> = serde_json::from_str(&res).map_err(debug)?;
         if raw_hiscores.len() == 0 {
             return Ok(None)
         }
@@ -300,11 +268,13 @@ fn basic_queries() {
 #[test]
 fn test_beatmap_fetch_store() {
     use helpers::modes::STANDARD;
+    use schema;
+
     let client = ApiClient::new();
     let beatmap = client.get_beatmap(1031604, STANDARD).unwrap().unwrap();
 
-    let query = diesel::insert(&beatmap)
-        .into(schema::beatmaps::dsl::beatmaps);
+    let query = diesel::insert_into(schema::beatmaps::dsl::beatmaps)
+        .values(&beatmap);
     let conn: &MysqlConnection = &*client.pool.get().expect("Unable to get connection from pool");
     query.execute(conn).unwrap();
 }
@@ -326,6 +296,7 @@ fn test_beatmap_retrieve() {
 #[test]
 fn test_user_stats_fetch_store() {
     use helpers::modes::STANDARD;
+    use schema;
 
     // get most recent user stats from the osu! API
     let client = ApiClient::new();
@@ -333,5 +304,8 @@ fn test_user_stats_fetch_store() {
 
     // store the update into the database
     let conn: &MysqlConnection = &*client.pool.get().expect("Unable to get connection from pool");
-    diesel::insert(&update).into(schema::updates::dsl::updates).execute(conn).unwrap();
+    diesel::insert_into(schema::updates::dsl::updates)
+        .values(&update)
+        .execute(conn)
+        .unwrap();
 }

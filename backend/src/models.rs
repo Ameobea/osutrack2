@@ -5,8 +5,6 @@ use schema::{users, updates, hiscores, beatmaps, online_users};
 
 /// Represents a user.  Maps our internal id to the osu! id and contains the last time the user was updated.
 #[derive(Associations, Identifiable, Queryable)]
-#[has_many(updates)]
-#[has_many(hiscores)]
 pub struct User {
     pub id: i32,
     pub username: String,

@@ -1,34 +1,35 @@
 pub mod modes;
 
-use std::io::Read;
 use std::fmt::Debug;
 
 use diesel::prelude::*;
 use diesel::mysql::MysqlConnection;
 use diesel::result::Error;
-use hyper;
-use hyper::client::Response;
-use r2d2::{ Pool, Config };
-use r2d2_diesel_mysql::ConnectionManager;
+use reqwest::{self, Response, StatusCode};
+use r2d2::Pool;
+use r2d2_diesel::ConnectionManager;
 
 use secret::DB_CREDENTIALS;
 use models::{User, Update};
 
 /// Utility function for making sure that a response is a 200 and then reading it into a String
 pub fn process_response(mut res: Response) -> Result<String, String> {
-    let _ = match res.status {
-        hyper::NotFound => Err(String::from("Received error of 404 Not Found")),
-        hyper::status::StatusCode::InternalServerError => {
+    let _ = match res.status() {
+        StatusCode::NotFound => Err(String::from("Received error of 404 Not Found")),
+        StatusCode::InternalServerError => {
             Err(String::from("Received error of 500 internal server error"))
         },
-        hyper::Ok => Ok(()),
-        _ => Err(format!("Received unknown error type: {:?}", res.status)),
+        StatusCode::Ok => Ok(()),
+        _ => Err(format!("Received unknown error type: {:?}", res.status())),
     }?;
 
-    let mut s = String::new();
-    res.read_to_string(&mut s).map_err(debug)?;
+    res.text().map_err(debug)
+}
 
-    Ok(s)
+pub fn get_url(url: &str) -> Result<String, String> {
+    process_response(
+        reqwest::get(url).map_err(|err| format!("Error while sending request to osu! API: {:?}", err))?
+    )
 }
 
 /// Given a type that can be debug-formatted, returns a String that contains its debug-formatted version.
@@ -48,9 +49,8 @@ pub fn parse_pair<T>(v: &str) -> T where T : ::std::str::FromStr {
 pub const MYSQL_DATE_FORMAT: &'static str = "%Y-%m-%d %H:%M:%S";
 
 pub fn create_db_pool() -> Pool<ConnectionManager<MysqlConnection>> {
-    let config = Config::default();
     let manager = ConnectionManager::<MysqlConnection>::new(format!("{}", DB_CREDENTIALS));
-    Pool::new(config, manager).expect("Failed to create pool.")
+    Pool::builder().build(manager).expect("Failed to create pool.")
 }
 
 /// Given a username, attempts to retrieve the stored `User` struct that goes along with it from the database.

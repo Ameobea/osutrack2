@@ -7,7 +7,7 @@ use diesel;
 use diesel::prelude::*;
 use diesel::BelongingToDsl;
 use rocket::State;
-use rocket_contrib::JSON;
+use rocket_contrib::Json;
 use serde_json;
 
 use super::DbPool;
@@ -101,12 +101,12 @@ impl UpdateDiff {
 /// Updates a user's stats using the osu! API and returns the changes since the last recorded update.
 #[get("/update/<username>/<mode>")]
 pub fn update(
-    api_client: State<ApiClient>, db_pool: State<DbPool>, username: &str, mode: u8
-) -> Result<Option<JSON<UpdateDiff>>, String> {
+    api_client: State<ApiClient>, db_pool: State<DbPool>, username: String, mode: u8
+) -> Result<Option<Json<UpdateDiff>>, String> {
     let client = api_client.inner();
     let db_conn = &*db_pool.get_conn();
 
-    let stats = client.get_stats(username, mode)?;
+    let stats = client.get_stats(&username, mode)?;
     match stats {
         None => { return Ok(None); },
         Some(s) => {
@@ -123,8 +123,8 @@ pub fn update(
             };
 
             if needs_insert {
-                diesel::insert(&s)
-                    .into(updates_dsl::updates)
+                diesel::insert_into(updates_dsl::updates)
+                    .values(&s)
                     .execute(db_conn)
                     .map_err(debug)?;
             }
@@ -146,15 +146,15 @@ pub fn update(
             let diff = UpdateDiff::diff(last_update.as_ref(), &s, old_hiscores, cur_hiscores);
 
             // insert all new hiscores into the database
-            diesel::insert(&diff.newhs)
-                .into(hiscores_dsl::hiscores)
+            diesel::insert_into(hiscores_dsl::hiscores)
+                .values(&diff.newhs)
                 .execute(db_conn)
                 .map_err(debug)?;
 
             // TODO: Prefetch all of the beatmaps and update them into the cache
 
             // calculate the difference between the current stats and the last update (if it exists) and return them
-            Ok(Some(JSON(diff)))
+            Ok(Some(Json(diff)))
         }
     }
 }
@@ -163,10 +163,10 @@ pub fn update(
 /// avoid the osu! server round-trip involved with getting live stats.  Returns a 404 if there is no stored updates for the
 /// user in the selected mode.
 #[get("/stats/<username>/<mode>")]
-pub fn get_stats(db_pool: State<DbPool>, username: &str, mode: u8) -> Result<Option<JSON<Update>>, String> {
+pub fn get_stats(db_pool: State<DbPool>, username: String, mode: u8) -> Result<Option<Json<Update>>, String> {
     let db_conn = &*db_pool.get_conn();
 
-    let usr: User = match get_user_from_username(db_conn, username)? {
+    let usr: User = match get_user_from_username(db_conn, &username)? {
         Some(usr) => usr,
         None => { return Ok(None); },
     };
@@ -175,7 +175,7 @@ pub fn get_stats(db_pool: State<DbPool>, username: &str, mode: u8) -> Result<Opt
         .order(updates_dsl::id.desc())
         .filter(updates_dsl::mode.eq(mode as i16))
         .first(db_conn)
-        .map(|x| Some(JSON(x)))
+        .map(|x| Some(Json(x)))
         .map_err(debug)
 }
 
@@ -183,23 +183,23 @@ pub fn get_stats(db_pool: State<DbPool>, username: &str, mode: u8) -> Result<Opt
 /// but returns the current statistics rather than the change since the last update
 #[get("/livestats/<username>/<mode>")]
 pub fn live_stats(
-    api_client: State<ApiClient>, db_pool: State<DbPool>, username: &str, mode: u8
-) -> Result<Option<JSON<NewUpdate>>, String> {
+    api_client: State<ApiClient>, db_pool: State<DbPool>, username: String, mode: u8
+) -> Result<Option<Json<NewUpdate>>, String> {
     let client = api_client.inner();
     let db_conn = &*db_pool.get_conn();
 
-    let stats: NewUpdate = match client.get_stats(username, mode)? {
+    let stats: NewUpdate = match client.get_stats(&username, mode)? {
         Some(u) => u,
         None => { return Ok(None); },
     };
 
     // check to see if the user exists in our database yet.  If it doesn't, it will soon because the `get_stats()`
     // function inserts it on another thread.
-    let usr: User = match get_user_from_username(db_conn, username)? {
+    let usr: User = match get_user_from_username(db_conn, &username)? {
         Some(usr) => usr,
         None => {
             // this means that the DB is currently in the process of inserting the user and update, so we don't need to bother
-            return Ok(Some(JSON(stats)));
+            return Ok(Some(Json(stats)));
         },
     };
 
@@ -217,21 +217,21 @@ pub fn live_stats(
     };
 
     if needs_insert {
-        diesel::insert(&stats)
-            .into(updates_dsl::updates)
+        diesel::insert_into(updates_dsl::updates)
+            .values(&stats)
             .execute(db_conn)
             .map_err(debug)?;
     }
 
-    Ok(Some(JSON(stats)))
+    Ok(Some(Json(stats)))
 }
 
 /// Returns all of a user's stored updates for a given gamemode.
 #[get("/updates/<username>/<mode>")]
-pub fn get_updates(db_pool: State<DbPool>, username: &str, mode: u8) -> Result<Option<JSON<Vec<Update>>>, String> {
+pub fn get_updates(db_pool: State<DbPool>, username: String, mode: u8) -> Result<Option<Json<Vec<Update>>>, String> {
     let db_conn = &*db_pool.get_conn();
 
-    let usr: User = match get_user_from_username(db_conn, username)? {
+    let usr: User = match get_user_from_username(db_conn, &username)? {
         Some(user) => user,
         None => { return Ok(None); },
     };
@@ -244,15 +244,15 @@ pub fn get_updates(db_pool: State<DbPool>, username: &str, mode: u8) -> Result<O
         .load::<Update>(db_conn)
         .map_err(debug)?;
 
-    Ok(Some(JSON(updates)))
+    Ok(Some(Json(updates)))
 }
 
 /// Returns all of a user's stored hsicores for a given gamemode.
 #[get("/hiscores/<username>/<mode>")]
-pub fn get_hiscores(db_pool: State<DbPool>, username: &str, mode: u8) -> Result<Option<JSON<Vec<Hiscore>>>, String> {
+pub fn get_hiscores(db_pool: State<DbPool>, username: String, mode: u8) -> Result<Option<Json<Vec<Hiscore>>>, String> {
     let db_conn = &*db_pool.get_conn();
 
-    let usr: User = match get_user_from_username(db_conn, username)? {
+    let usr: User = match get_user_from_username(db_conn, &username)? {
         Some(user) => user,
         None => { return Ok(None); },
     };
@@ -265,19 +265,19 @@ pub fn get_hiscores(db_pool: State<DbPool>, username: &str, mode: u8) -> Result<
         .load::<Hiscore>(db_conn)
         .map_err(debug)?;
 
-    Ok(Some(JSON(hiscores)))
+    Ok(Some(Json(hiscores)))
 }
 
 /// Returns the difference between a user's current stats and the last time their total PP score was different than its
 /// current value.
 #[get("/lastpp/<username>/<mode>")]
 pub fn get_last_pp_diff(
-    api_client: State<ApiClient>, db_pool: State<DbPool>, username: &str, mode: u8
-) -> Result<Option<JSON<UpdateDiff>>, String> {
+    api_client: State<ApiClient>, db_pool: State<DbPool>, username: String, mode: u8
+) -> Result<Option<Json<UpdateDiff>>, String> {
     let client = api_client.inner();
     let db_conn = &*db_pool.get_conn();
 
-    let stats = client.get_stats(username, mode)?;
+    let stats = client.get_stats(&username, mode)?;
     match stats {
         None => { return Ok(None); },
         Some(s) => {
@@ -342,18 +342,18 @@ pub fn get_last_pp_diff(
             };
 
             // calculate the diff between the current and last significant update and return it
-            Ok(Some(JSON(UpdateDiff::diff(last_different_update, &s, old_hiscores, cur_hiscores))))
+            Ok(Some(Json(UpdateDiff::diff(last_different_update, &s, old_hiscores, cur_hiscores))))
         }
     }
 }
 
 /// Returns data for a set of beatmaps.  It first attempts to retrieve them from the database but if they aren't
-/// stored, they will be retrieved from the osu! API and inserted.  Returns a JSON-encoded hap of beatmap_id:beatmap
+/// stored, they will be retrieved from the osu! API and inserted.  Returns a Json-encoded hap of beatmap_id:beatmap
 #[get("/beatmaps/<ids>/<mode>")]
 pub fn get_beatmaps(
-    api_client: State<ApiClient>, db_pool: State<DbPool>, ids: &str, mode: u8
-) -> Result<Option<JSON<HashMap<i32, Beatmap>>>, String> {
-    let ids: Vec<i32> = serde_json::from_str(ids).map_err(debug)?;
+    api_client: State<ApiClient>, db_pool: State<DbPool>, ids: String, mode: u8
+) -> Result<Option<Json<HashMap<i32, Beatmap>>>, String> {
+    let ids: Vec<i32> = serde_json::from_str(&ids).map_err(debug)?;
     // TODO: Search the database and find all beatmaps that have IDs that are included in the parsed vector of ids.
     // TODO: Retrieve all beatmaps from the API (preferrably asynchronously) that are not contained in the database
     // TODO: Package up all results and return them
@@ -365,7 +365,7 @@ pub fn get_beatmaps(
 #[get("/beatmap/<id>/<mode>")]
 pub fn get_beatmap(
     api_client: State<ApiClient>, db_pool: State<DbPool>, id: i32, mode: u8
-) -> Result<Option<JSON<Beatmap>>, String> {
+) -> Result<Option<Json<Beatmap>>, String> {
     // TODO: Search the database for the beatmap with the supplied id
     // TODO: if not found in the database, return it from the API.
     unimplemented!();

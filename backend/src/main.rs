@@ -3,17 +3,17 @@
 
 #![feature(plugin)]
 #![plugin(rocket_codegen)]
+#![recursion_limit="256"]
 
 extern crate chrono;
 #[macro_use]
-extern crate diesel_codegen;
-#[macro_use]
 extern crate diesel;
-extern crate hyper;
-extern crate hyper_native_tls;
+#[macro_use]
+extern crate diesel_infer_schema;
 extern crate log;
 extern crate r2d2;
-extern crate r2d2_diesel_mysql;
+extern crate r2d2_diesel;
+extern crate reqwest;
 extern crate rocket;
 // #[macro_use]
 extern crate rocket_contrib;
@@ -23,7 +23,7 @@ extern crate serde_derive;
 
 use diesel::mysql::MysqlConnection;
 use r2d2::{ Pool, PooledConnection };
-use r2d2_diesel_mysql::ConnectionManager;
+use r2d2_diesel::ConnectionManager;
 
 mod secret;
 mod routes;
